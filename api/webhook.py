@@ -1,23 +1,38 @@
 import os
+import re
+import json
 from collections import deque
-from flask import Flask, request, jsonify
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 from datetime import datetime
-import asyncio
+from urllib import request as url_request
+
+from flask import Flask, jsonify, request
+
 
 app = Flask(__name__)
 
 TOKEN = os.environ.get("TOKEN")
+TELEGRAM_API = f"https://api.telegram.org/bot{TOKEN}" if TOKEN else None
 
-VYRUCHKA, ZAKAZY, SREDNYAYA_SKOROST, DOLGIH, LAYKI, DIZLAYKI, NOVYH_GOSTEY, STARYH_GOSTEY = range(8)
+FIELDS = [
+    ("revenue", "Выручка", "Введите выручку:"),
+    ("orders", "Заказы", "Введите количество заказов:"),
+    ("average_check", "Средний чек", "Введите средний чек:"),
+    ("average_speed", "Средняя скорость", "Введите среднюю скорость в формате мм:сс:"),
+    ("long_orders", "Долгих", "Введите количество долгих заказов:"),
+    ("likes", "Лайки", "Введите количество лайков:"),
+    ("dislikes", "Дизлайки", "Введите количество дизлайков:"),
+    ("new_guests", "Новых гостей", "Введите количество новых гостей:"),
+    ("old_guests", "Старых гостей", "Введите количество старых гостей:"),
+]
 
-application = None
+SPEED_RE = re.compile(r"^\d{1,3}:[0-5]\d$")
+sessions = {}
 processed_update_ids = set()
 processed_update_order = deque()
 MAX_PROCESSED_UPDATES = 200
 
-def already_processed(update_id):
+
+def is_duplicate_update(update_id):
     if update_id is None:
         return False
 
@@ -33,135 +48,107 @@ def already_processed(update_id):
 
     return False
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text(
-        'Привет! Я помогу создать отчет для Мега Химки.\n'
-        'Введите выручку:'
-    )
-    return VYRUCHKA
 
-async def vyruchka(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['vyruchka'] = update.message.text
-    await update.message.reply_text('Введите количество заказов:')
-    return ZAKAZY
+def send_message(chat_id, text):
+    if not TELEGRAM_API:
+        raise RuntimeError("TOKEN environment variable is not set")
 
-async def zakazy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['zakazy'] = update.message.text
-
-    try:
-        vyruchka = float(context.user_data['vyruchka'])
-        zakazy_count = int(update.message.text)
-        sredniy_chek = vyruchka / zakazy_count if zakazy_count > 0 else 0
-        context.user_data['sredniy_chek'] = f"{sredniy_chek:.2f}"
-    except:
-        context.user_data['sredniy_chek'] = "0"
-
-    await update.message.reply_text('Введите среднюю скорость (формат: 03:16):')
-    return SREDNYAYA_SKOROST
-
-async def srednyaya_skorost(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['srednyaya_skorost'] = update.message.text
-    await update.message.reply_text('Введите количество долгих заказов:')
-    return DOLGIH
-
-async def dolgih(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['dolgih'] = update.message.text
-    await update.message.reply_text('Введите количество лайков:')
-    return LAYKI
-
-async def layki(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['layki'] = update.message.text
-    await update.message.reply_text('Введите количество дизлайков:')
-    return DIZLAYKI
-
-async def dizlayki(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['dizlayki'] = update.message.text
-    await update.message.reply_text('Введите количество новых гостей:')
-    return NOVYH_GOSTEY
-
-async def novyh_gostey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['novyh_gostey'] = update.message.text
-    await update.message.reply_text('Введите количество старых гостей:')
-    return STARYH_GOSTEY
-
-async def staryh_gostey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data['staryh_gostey'] = update.message.text
-
-    date_str = datetime.now().strftime('%d.%m.%Y')
-
-    report = f"""Отчёт Мега Химки {date_str}:
-Выручка - {context.user_data['vyruchka']}
-Заказы - {context.user_data['zakazy']}
-Средний чек - {context.user_data['sredniy_chek']}
-Средняя скорость - {context.user_data['srednyaya_skorost']}
-Долгих - {context.user_data['dolgih']}
-Лайки - {context.user_data['layki']}
-Дизлайки - {context.user_data['dizlayki']}
-Новых гостей - {context.user_data['novyh_gostey']}
-Старых гостей - {context.user_data['staryh_gostey']}"""
-
-    await update.message.reply_text(report)
-    await update.message.reply_text('\nОтчет готов! Чтобы создать новый отчет, используйте /start')
-
-    return ConversationHandler.END
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Отчет отменен. Используйте /start для создания нового отчета.')
-    return ConversationHandler.END
-
-def setup_application():
-    global application
-
-    if application is not None:
-        return application
-
-    application = Application.builder().token(TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            VYRUCHKA: [MessageHandler(filters.TEXT & ~filters.COMMAND, vyruchka)],
-            ZAKAZY: [MessageHandler(filters.TEXT & ~filters.COMMAND, zakazy)],
-            SREDNYAYA_SKOROST: [MessageHandler(filters.TEXT & ~filters.COMMAND, srednyaya_skorost)],
-            DOLGIH: [MessageHandler(filters.TEXT & ~filters.COMMAND, dolgih)],
-            LAYKI: [MessageHandler(filters.TEXT & ~filters.COMMAND, layki)],
-            DIZLAYKI: [MessageHandler(filters.TEXT & ~filters.COMMAND, dizlayki)],
-            NOVYH_GOSTEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, novyh_gostey)],
-            STARYH_GOSTEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, staryh_gostey)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
+    payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
+    req = url_request.Request(
+        f"{TELEGRAM_API}/sendMessage",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
     )
 
-    application.add_handler(conv_handler)
+    with url_request.urlopen(req, timeout=10) as response:
+        response.read()
 
-    return application
 
-@app.route('/api/webhook', methods=['POST'])
+def start_report(chat_id):
+    sessions[chat_id] = {"step": 0, "answers": {}}
+    send_message(
+        chat_id,
+        "Привет! Я помогу создать отчёт Мега Химки.\n"
+        f"{FIELDS[0][2]}",
+    )
+
+
+def build_report(answers):
+    date_str = datetime.now().strftime("%d.%m.%Y")
+    lines = [f"Отчёт Мега Химки {date_str}:"]
+
+    for key, label, _prompt in FIELDS:
+        lines.append(f"{label} - {answers[key]}")
+
+    return "\n".join(lines)
+
+
+def handle_answer(chat_id, text):
+    session = sessions.get(chat_id)
+
+    if session is None:
+        start_report(chat_id)
+        return
+
+    step = session["step"]
+    key, _label, _prompt = FIELDS[step]
+    value = text.strip()
+
+    if key == "average_speed" and not SPEED_RE.fullmatch(value):
+        send_message(chat_id, "Средняя скорость должна быть в формате мм:сс, например 03:16.")
+        return
+
+    session["answers"][key] = value
+    step += 1
+
+    if step >= len(FIELDS):
+        report = build_report(session["answers"])
+        sessions.pop(chat_id, None)
+        send_message(chat_id, report)
+        return
+
+    session["step"] = step
+    send_message(chat_id, FIELDS[step][2])
+
+
+def handle_update(update):
+    message = update.get("message") or update.get("edited_message") or {}
+    chat = message.get("chat") or {}
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").strip()
+
+    if not chat_id or not text:
+        return
+
+    if text.startswith("/start"):
+        start_report(chat_id)
+        return
+
+    if text.startswith("/cancel"):
+        sessions.pop(chat_id, None)
+        send_message(chat_id, "Отчёт отменён. Чтобы создать новый отчёт, используйте /start.")
+        return
+
+    handle_answer(chat_id, text)
+
+
+@app.route("/api/webhook", methods=["POST"])
 def webhook():
-    update_data = request.get_json(force=True)
+    update = request.get_json(force=True, silent=True) or {}
 
-    if already_processed(update_data.get('update_id')):
-        return jsonify({'ok': True, 'duplicate': True})
+    if is_duplicate_update(update.get("update_id")):
+        return jsonify({"ok": True, "duplicate": True})
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    handle_update(update)
+    return jsonify({"ok": True})
 
-    async def process():
-        app_instance = setup_application()
-        await app_instance.initialize()
-        update = Update.de_json(update_data, app_instance.bot)
-        await app_instance.process_update(update)
 
-    loop.run_until_complete(process())
-    loop.close()
-
-    return jsonify({'ok': True})
-
-@app.route('/api/webhook', methods=['GET'])
+@app.route("/api/webhook", methods=["GET"])
 def webhook_info():
-    return jsonify({'status': 'ok'})
+    return jsonify({"ok": True, "status": "webhook is running"})
 
-@app.route('/')
+
+@app.route("/", methods=["GET"])
 def index():
-    return jsonify({'status': 'Bot webhook is running'})
+    return jsonify({"ok": True, "status": "Mega Khimki report bot is running"})
