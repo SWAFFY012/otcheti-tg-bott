@@ -8,6 +8,7 @@ TOKEN = '8929830688:AAFoQMeM0ZourQuWkOZCIjBpInB8QpkCWSM'
 VYRUCHKA, ZAKAZY, SREDNYAYA_SKOROST, DOLGIH, LAYKI, DIZLAYKI, NOVYH_GOSTEY, STARYH_GOSTEY = range(8)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     await update.message.reply_text(
         'Привет! Я помогу создать отчет для Мега Химки.\n'
         'Введите выручку:'
@@ -99,6 +100,7 @@ def main():
             STARYH_GOSTEY: [MessageHandler(filters.TEXT & ~filters.COMMAND, staryh_gostey)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+        per_message=False,
     )
 
     application.add_handler(conv_handler)
