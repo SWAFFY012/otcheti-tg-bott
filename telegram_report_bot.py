@@ -5,7 +5,7 @@ from datetime import datetime
 
 TOKEN = '8929830688:AAFoQMeM0ZourQuWkOZCIjBpInB8QpkCWSM'
 
-VYRUCHKA, ZAKAZY, SREDNIY_CHEK, SREDNYAYA_SKOROST, DOLGIH, LAYKI, DIZLAYKI, NOVYH_GOSTEY, STARYH_GOSTEY = range(9)
+VYRUCHKA, ZAKAZY, SREDNYAYA_SKOROST, DOLGIH, LAYKI, DIZLAYKI, NOVYH_GOSTEY, STARYH_GOSTEY = range(8)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
