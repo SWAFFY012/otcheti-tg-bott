@@ -133,8 +133,7 @@ def handle_update(update):
     handle_answer(chat_id, text)
 
 
-@app.route("/api/webhook", methods=["POST"])
-def webhook():
+def process_webhook_request():
     update = request.get_json(force=True, silent=True) or {}
 
     if is_duplicate_update(update.get("update_id")):
@@ -142,6 +141,16 @@ def webhook():
 
     handle_update(update)
     return jsonify({"ok": True})
+
+
+@app.route("/api/webhook", methods=["POST"])
+def webhook():
+    return process_webhook_request()
+
+
+@app.route("/", methods=["POST"])
+def root_webhook():
+    return process_webhook_request()
 
 
 @app.route("/api/webhook", methods=["GET"])
@@ -152,3 +161,8 @@ def webhook_info():
 @app.route("/", methods=["GET"])
 def index():
     return jsonify({"ok": True, "status": "Mega Khimki report bot is running"})
+
+
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({"ok": True, "token_configured": bool(TOKEN)})
