@@ -1,4 +1,5 @@
 import os
+from collections import deque
 from flask import Flask, request, jsonify
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
@@ -12,8 +13,28 @@ TOKEN = os.environ.get("TOKEN")
 VYRUCHKA, ZAKAZY, SREDNYAYA_SKOROST, DOLGIH, LAYKI, DIZLAYKI, NOVYH_GOSTEY, STARYH_GOSTEY = range(8)
 
 application = None
+processed_update_ids = set()
+processed_update_order = deque()
+MAX_PROCESSED_UPDATES = 200
+
+def already_processed(update_id):
+    if update_id is None:
+        return False
+
+    if update_id in processed_update_ids:
+        return True
+
+    processed_update_ids.add(update_id)
+    processed_update_order.append(update_id)
+
+    while len(processed_update_order) > MAX_PROCESSED_UPDATES:
+        old_update_id = processed_update_order.popleft()
+        processed_update_ids.discard(old_update_id)
+
+    return False
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     await update.message.reply_text(
         'Привет! Я помогу создать отчет для Мега Химки.\n'
         'Введите выручку:'
@@ -119,6 +140,9 @@ def setup_application():
 @app.route('/api/webhook', methods=['POST'])
 def webhook():
     update_data = request.get_json(force=True)
+
+    if already_processed(update_data.get('update_id')):
+        return jsonify({'ok': True, 'duplicate': True})
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
