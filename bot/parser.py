@@ -87,6 +87,73 @@ async def _try_login(page: Page, config: SiteConfig) -> None:
     await _settle_after_click(page, config)
 
 
+async def _select_coffee_shop(page: Page, config: SiteConfig) -> None:
+    """Select the configured coffee shop before reading monthly statistics."""
+    target = config.data_selectors.get("coffee_shop_text", "Химки 16-3")
+    if not target:
+        return
+
+    changed_native_select = await page.evaluate(
+        """target => {
+            const normalize = (text) => (text || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+            const normalizedTarget = normalize(target);
+
+            for (const select of document.querySelectorAll('select')) {
+                const option = [...select.options].find((item) => normalize(item.textContent).includes(normalizedTarget));
+                if (!option) continue;
+
+                if (select.value === option.value) {
+                    return true;
+                }
+
+                select.value = option.value;
+                select.dispatchEvent(new Event('input', { bubbles: true }));
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+                return true;
+            }
+
+            return false;
+        }""",
+        target,
+    )
+    if changed_native_select:
+        await _settle_after_click(page, config)
+        return
+
+    clicked_dropdown = await page.evaluate(
+        """() => {
+            const selectors = [
+                '.select2-selection',
+                '.select2-choice',
+                '.chosen-single',
+                '.ant-select-selector',
+                '[role="combobox"]',
+                'button.dropdown-toggle',
+                '.dropdown-toggle'
+            ];
+
+            const candidates = selectors.flatMap((selector) => [...document.querySelectorAll(selector)]);
+            const dropdown = candidates.find((element) => {
+                const rect = element.getBoundingClientRect();
+                return rect.width > 100 && rect.height > 20 && rect.top < 180 && rect.left < 500;
+            });
+
+            if (!dropdown) return false;
+
+            dropdown.click();
+            return true;
+        }"""
+    )
+    if not clicked_dropdown:
+        return
+
+    await page.wait_for_timeout(800)
+    option = page.get_by_text(target, exact=False).last
+    if await option.count() > 0:
+        await option.click()
+        await _settle_after_click(page, config)
+
+
 async def _open_operational_days_tab(page: Page, config: SiteConfig) -> None:
     """Switch to the operational days tab when it is visible on the statistics page."""
     tab_text = config.data_selectors.get("operational_tab_text", "По дням (операционка)")
@@ -769,6 +836,7 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
         try:
             await _goto(page, config.url, config)
             await _try_login(page, config)
+            await _select_coffee_shop(page, config)
             await _open_operational_days_tab(page, config)
 
             table_selector = config.data_selectors.get("tables", "table")
