@@ -49,6 +49,20 @@ async def _settle_after_click(page: Page, config: SiteConfig) -> None:
     await page.wait_for_timeout(1500)
 
 
+async def _click_text(page: Page, text: str, config: SiteConfig) -> bool:
+    """Click visible text using exact match first, then a softer contains-text fallback."""
+    for locator in (
+        page.get_by_text(text, exact=True),
+        page.locator(f"text={text}"),
+    ):
+        if await locator.count() == 0:
+            continue
+        await locator.first.click()
+        await _settle_after_click(page, config)
+        return True
+    return False
+
+
 async def _try_login(page: Page, config: SiteConfig) -> None:
     """Authorize when the page shows login inputs from config.json."""
     selectors = config.login_selectors
@@ -232,19 +246,15 @@ async def _open_guest_opinion(page: Page, config: SiteConfig) -> None:
 
     await _goto(page, analytics_url, config)
 
-    guest_opinion = page.get_by_text(guest_opinion_text, exact=True)
-    if await guest_opinion.count() > 0:
-        await guest_opinion.first.click()
-        await _settle_after_click(page, config)
+    print("Analytics: opening guest opinion...")
+    await _click_text(page, guest_opinion_text, config)
 
     metrics_tab_text = config.data_selectors.get(
         "guest_metrics_tab_text",
         "Дизлайки и операционные метрики",
     )
-    metrics_tab = page.get_by_text(metrics_tab_text, exact=True)
-    if await metrics_tab.count() > 0:
-        await metrics_tab.first.click()
-        await _settle_after_click(page, config)
+    print("Analytics: opening dislikes and operational metrics...")
+    await _click_text(page, metrics_tab_text, config)
 
 
 async def _prepare_guest_opinion_table(page: Page, config: SiteConfig) -> None:
@@ -263,16 +273,26 @@ async def _prepare_guest_opinion_table(page: Page, config: SiteConfig) -> None:
     section = page.get_by_text(section_text, exact=True)
     if await section.count() > 0:
         await section.first.scroll_into_view_if_needed()
+    else:
+        await page.mouse.wheel(0, 7000)
 
-    search_input = page.get_by_placeholder("Поиск").last
-    if await search_input.count() == 0:
-        search_input = page.locator(f"text={section_text} >> xpath=following::input[1]")
-    if await search_input.count() == 0:
-        search_input = page.locator("input").last
+    search_candidates = [
+        page.locator(f"text={section_text} >> xpath=following::input[1]"),
+        page.get_by_placeholder("Поиск").last,
+        page.locator("input").last,
+    ]
 
-    if await search_input.count() > 0:
-        await search_input.fill(search_text)
-        await page.wait_for_timeout(1500)
+    for search_input in search_candidates:
+        if await search_input.count() == 0:
+            continue
+        try:
+            print(f"Analytics: typing search '{search_text}'...")
+            await search_input.fill(search_text)
+            await page.wait_for_timeout(2500)
+            if await page.get_by_text(search_text, exact=False).count() > 0:
+                return
+        except Exception:
+            continue
 
 
 def _find_row_by_text(tables: list[dict], needle: str) -> dict[str, str] | None:
@@ -292,7 +312,10 @@ async def _extract_guest_opinion_metrics(page: Page, config: SiteConfig) -> dict
         tables = await _extract_tables_all_columns(page, config.data_selectors.get("tables", "table"))
         row = _find_row_by_text(tables, config.data_selectors.get("analytics_search_text", "химки"))
         if not row:
+            print("Analytics: row with Himki was not found. Saving debug artifacts...")
+            await _save_debug_artifacts(page, "guest_opinion_not_found")
             return {}
+        print(f"Analytics: row found: {row}")
         return row
     except Exception:
         await _save_debug_artifacts(page, "guest_opinion")
