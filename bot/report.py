@@ -56,11 +56,7 @@ def build_text_report(data: ParsedReportData) -> str:
     revenue_growth = _clean_percent(_get_value(row, ["Прирост выручки, %", "Прирост выручки"], "0%"))
     orders = _clean_number(_get_value(row, ["Заказы, шт.", "Заказы"], "0"))
     average_check = _clean_number(_get_value(row, ["Средний чек, руб.", "Средний чек"], "0"))
-    average_speed = _get_value(
-        analytics,
-        ["Среднее время приготовления за день", "Среднее время приготовления", "Средняя скорость"],
-        _get_value(row, ["Скорость кухни", "Средняя скорость", "Среднее время приготовления"], "0"),
-    )
+    average_speed = _get_value(row, ["Среднее время приготовления", "Средняя скорость", "Скорость кухни"], "0")
     long_orders = _clean_number(_get_value(row, ["Долгие заказы", "Долгих", "Долгие", "Долгих заказов"], "0"))
     likes = _clean_number(_get_value(analytics, ["Лайки, #", "Лайки"], "0"))
     dislikes = _clean_number(_get_value(analytics, ["Дизлайки, #", "Дизлайки"], "0"))
