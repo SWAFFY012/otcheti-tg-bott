@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -25,6 +26,7 @@ def _get_value(row: dict[str, str], candidates: list[str], default: str = "0") -
 
 def _clean_number(value: str) -> str:
     cleaned = value.replace("\xa0", " ").strip()
+    cleaned = re.sub(r"[,.]0+%$", "", cleaned)
     if cleaned.endswith(",00"):
         cleaned = cleaned[:-3]
     return cleaned.replace(" ", "")

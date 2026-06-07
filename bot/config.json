@@ -17,7 +17,7 @@
     },
     "data_selectors": {
       "operational_tab_text": "По дням (операционка)",
-      "analytics_url": "https://officemanager.dodois.io/OfficeManager/Analytics",
+      "analytics_url": "https://officemanager.dodois.io/OfficeManager/Analytics/customer_opinion?native_filters_key=QpYohS8ufHc2UIK3wpubZS1e6pyB6YfGplN8-iqjR4xQE_tIDn-k1pAKoqUob4CZ",
       "guest_opinion_text": "Гостевое мнение",
       "guest_metrics_tab_text": "Дизлайки и операционные метрики",
       "analytics_period_text": "Последние сутки",
