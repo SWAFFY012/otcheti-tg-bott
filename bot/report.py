@@ -8,6 +8,68 @@ from config import ReportConfig
 from parser import ParsedReportData
 
 
+def _normalize_key(value: str) -> str:
+    return "".join(char.lower() for char in value if char.isalnum())
+
+
+def _get_value(row: dict[str, str], candidates: list[str], default: str = "0") -> str:
+    normalized_row = {_normalize_key(key): value for key, value in row.items()}
+
+    for candidate in candidates:
+        value = normalized_row.get(_normalize_key(candidate))
+        if value not in (None, ""):
+            return value.strip()
+
+    return default
+
+
+def _clean_number(value: str) -> str:
+    cleaned = value.replace("\xa0", " ").strip()
+    if cleaned.endswith(",00"):
+        cleaned = cleaned[:-3]
+    return cleaned.replace(" ", "")
+
+
+def build_text_report(data: ParsedReportData) -> str:
+    """Build the short Telegram report from the last operational day row."""
+    if not data.last_day:
+        raise RuntimeError("Не нашёл строку последнего дня месяца в таблице.")
+
+    row = data.last_day
+    day = _get_value(row, ["Дата", "column_1"], "")
+    date_str = data.collected_at.strftime("%d.%m.%Y")
+    if day.isdigit():
+        try:
+            date_str = data.collected_at.replace(day=int(day)).strftime("%d.%m.%Y")
+        except ValueError:
+            date_str = f"{int(day):02d}.{data.collected_at.strftime('%m.%Y')}"
+
+    revenue = _clean_number(_get_value(row, ["Выручка, руб.", "Выручка"], "0"))
+    orders = _clean_number(_get_value(row, ["Заказы, шт.", "Заказы"], "0"))
+    average_check = _clean_number(_get_value(row, ["Средний чек, руб.", "Средний чек"], "0"))
+    average_speed = _get_value(row, ["Скорость кухни", "Средняя скорость", "Среднее время приготовления"], "0")
+    long_orders = _clean_number(_get_value(row, ["Долгих", "Долгие", "Долгих заказов"], "0"))
+    likes = _clean_number(_get_value(row, ["Лайки"], "0"))
+    dislikes = _clean_number(_get_value(row, ["Дизлайки"], "0"))
+    new_guests = _clean_number(_get_value(row, ["Новых гостей", "Новые гости"], "0"))
+    old_guests = _clean_number(_get_value(row, ["Старых гостей", "Старые гости"], "0"))
+
+    return "\n".join(
+        [
+            f"Отчёт Мега Химки {date_str}:",
+            f"Выручка - {revenue}",
+            f"Заказы - {orders}",
+            f"Средний чек - {average_check}",
+            f"Средняя скорость - {average_speed}",
+            f"Долгих - {long_orders}",
+            f"Лайки - {likes}",
+            f"Дизлайки - {dislikes}",
+            f"Новых гостей - {new_guests}",
+            f"Старых гостей - {old_guests}",
+        ]
+    )
+
+
 def _safe_sheet_name(name: str) -> str:
     invalid_chars = set('[]:*?/\\')
     safe = "".join(char if char not in invalid_chars else "_" for char in name)
