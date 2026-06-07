@@ -25,6 +25,30 @@ async def _locator_exists(page: Page, selector: str) -> bool:
     return await page.locator(selector).count() > 0
 
 
+async def _goto(page: Page, url: str, config: SiteConfig) -> None:
+    """Navigate with retries; OfficeManager can keep background requests open for a long time."""
+    last_error = None
+
+    for _attempt in range(3):
+        try:
+            await page.goto(url, wait_until="domcontentloaded", timeout=config.timeout_ms)
+            await page.wait_for_timeout(2000)
+            return
+        except PlaywrightTimeoutError as exc:
+            last_error = exc
+            await page.wait_for_timeout(3000)
+
+    raise last_error
+
+
+async def _settle_after_click(page: Page, config: SiteConfig) -> None:
+    try:
+        await page.wait_for_load_state("domcontentloaded", timeout=10000)
+    except PlaywrightTimeoutError:
+        pass
+    await page.wait_for_timeout(1500)
+
+
 async def _try_login(page: Page, config: SiteConfig) -> None:
     """Authorize when the page shows login inputs from config.json."""
     selectors = config.login_selectors
@@ -42,7 +66,7 @@ async def _try_login(page: Page, config: SiteConfig) -> None:
     await page.locator(username_selector).first.fill(config.login)
     await page.locator(password_selector).first.fill(config.password)
     await page.locator(submit_selector).first.click()
-    await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+    await _settle_after_click(page, config)
 
 
 async def _open_operational_days_tab(page: Page, config: SiteConfig) -> None:
@@ -53,7 +77,7 @@ async def _open_operational_days_tab(page: Page, config: SiteConfig) -> None:
         tab = page.get_by_text(tab_text, exact=True)
         if await tab.count() > 0:
             await tab.first.click()
-            await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+            await _settle_after_click(page, config)
     except PlaywrightTimeoutError:
         return
 
@@ -182,12 +206,12 @@ async def _open_guest_opinion(page: Page, config: SiteConfig) -> None:
     )
     guest_opinion_text = config.data_selectors.get("guest_opinion_text", "Гостевое мнение")
 
-    await page.goto(analytics_url, wait_until="networkidle", timeout=config.timeout_ms)
+    await _goto(page, analytics_url, config)
 
     guest_opinion = page.get_by_text(guest_opinion_text, exact=True)
     if await guest_opinion.count() > 0:
         await guest_opinion.first.click()
-        await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+        await _settle_after_click(page, config)
 
     metrics_tab_text = config.data_selectors.get(
         "guest_metrics_tab_text",
@@ -196,7 +220,7 @@ async def _open_guest_opinion(page: Page, config: SiteConfig) -> None:
     metrics_tab = page.get_by_text(metrics_tab_text, exact=True)
     if await metrics_tab.count() > 0:
         await metrics_tab.first.click()
-        await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+        await _settle_after_click(page, config)
 
 
 async def _prepare_guest_opinion_table(page: Page, config: SiteConfig) -> None:
@@ -289,7 +313,7 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
         page.set_default_timeout(config.timeout_ms)
 
         try:
-            await page.goto(config.url, wait_until="networkidle", timeout=config.timeout_ms)
+            await _goto(page, config.url, config)
             await _try_login(page, config)
             await _open_operational_days_tab(page, config)
 
