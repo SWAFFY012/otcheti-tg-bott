@@ -1,0 +1,4 @@
+aiogram==3.*
+pandas==2.*
+openpyxl==3.*
+playwright==1.*

@@ -2,6 +2,51 @@
 
 Бот для создания короткого отчёта Мега Химки.
 
+## Автоматический Excel-отчёт с сайта
+
+Новый модуль `bot/` запускает Telegram-бота на `aiogram 3`.
+Команда `/report` открывает сайт OfficeManager через Playwright, при необходимости авторизуется,
+собирает видимые таблицы и карточки со страницы, создаёт Excel-файл через `pandas` и `openpyxl`,
+а затем отправляет отчёт пользователю в Telegram.
+
+Структура:
+
+```text
+bot/
+├── main.py
+├── parser.py
+├── report.py
+├── config.py
+├── config.json
+├── reports/
+└── requirements.txt
+```
+
+Запуск на сервере с Python 3.12:
+
+```bash
+cd bot
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+set BOT_TOKEN=telegram_bot_token
+set SITE_LOGIN=office_manager_login
+set SITE_PASSWORD=office_manager_password
+python main.py
+```
+
+На Linux-сервере переменные задаются так:
+
+```bash
+export BOT_TOKEN="telegram_bot_token"
+export SITE_LOGIN="office_manager_login"
+export SITE_PASSWORD="office_manager_password"
+python main.py
+```
+
+Если сайт поменяет вёрстку, поправьте CSS-селекторы в `bot/config.json`.
+
 ## Поля отчёта
 
 Бот спрашивает:

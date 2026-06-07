@@ -1,0 +1,26 @@
+{
+  "telegram": {
+    "token": "",
+    "allowed_user_ids": []
+  },
+  "site": {
+    "url": "https://officemanager.dodois.io/OfficeManager/MonthlyStatistics",
+    "login": "",
+    "password": "",
+    "headless": true,
+    "timeout_ms": 60000,
+    "login_selectors": {
+      "username": "input[type='email'], input[name='email'], input[name='login'], input[type='text']",
+      "password": "input[type='password']",
+      "submit": "button[type='submit'], input[type='submit']"
+    },
+    "data_selectors": {
+      "tables": "table",
+      "cards": "[data-testid], .card, .tile, .widget"
+    }
+  },
+  "report": {
+    "output_dir": "reports",
+    "file_prefix": "mega_khimki_report"
+  }
+}
