@@ -56,6 +56,8 @@ async def unknown_text(message: Message) -> None:
 async def main() -> None:
     # Polling cannot work while Telegram sends updates to an old webhook URL.
     await bot.delete_webhook(drop_pending_updates=True)
+    me = await bot.get_me()
+    print(f"Бот запущен: @{me.username}. Оставьте это окно открытым.")
     await dp.start_polling(bot)
 
 
