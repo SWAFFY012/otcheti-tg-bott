@@ -16,6 +16,7 @@
       "submit": "button[type='submit'], input[type='submit']"
     },
     "data_selectors": {
+      "operational_tab_text": "По дням (операционка)",
       "tables": "table",
       "cards": "[data-testid], .card, .tile, .widget"
     }

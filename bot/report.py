@@ -27,9 +27,13 @@ def create_excel_report(data: ParsedReportData, config: ReportConfig) -> Path:
                 {"Параметр": "Дата сбора", "Значение": data.collected_at.strftime("%d.%m.%Y %H:%M:%S")},
                 {"Параметр": "Таблиц найдено", "Значение": len(data.tables)},
                 {"Параметр": "Карточек найдено", "Значение": len(data.cards)},
+                {"Параметр": "Последний день найден", "Значение": "да" if data.last_day else "нет"},
             ]
         )
         summary.to_excel(writer, sheet_name="Summary", index=False)
+
+        if data.last_day:
+            pd.DataFrame([data.last_day]).to_excel(writer, sheet_name="Last day", index=False)
 
         if data.cards:
             pd.DataFrame(data.cards).to_excel(writer, sheet_name="Cards", index=False)
@@ -46,8 +50,8 @@ def create_excel_report(data: ParsedReportData, config: ReportConfig) -> Path:
                 [
                     {
                         "Сообщение": (
-                            "Данные не найдены. Проверьте авторизацию и CSS-селекторы "
-                            "в bot/config.json."
+                            "Данные не найдены. Проверьте авторизацию, сохранённую сессию "
+                            "и CSS-селекторы в bot/config.json."
                         )
                     }
                 ]

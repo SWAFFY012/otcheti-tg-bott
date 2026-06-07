@@ -44,7 +44,7 @@ async def report_command(message: Message) -> None:
         report_path = create_excel_report(parsed_data, config.report)
         await message.answer_document(
             FSInputFile(report_path),
-            caption="Готово. Отправляю Excel-отчёт.",
+            caption="Готово. В Excel есть лист Last day с последним днём месяца.",
         )
         await status_message.delete()
     except Exception as exc:

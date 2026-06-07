@@ -12,6 +12,7 @@ async def main() -> None:
 
     print(f"Tables found: {len(data.tables)}")
     print(f"Cards found: {len(data.cards)}")
+    print(f"Last day found: {data.last_day or 'not found'}")
     print(f"Excel report created: {report_path}")
 
     if not data.tables and not data.cards:
