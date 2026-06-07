@@ -12,6 +12,7 @@ async def main() -> None:
     print(f"Tables found: {len(data.tables)}")
     print(f"Cards found: {len(data.cards)}")
     print(f"Last day found: {data.last_day or 'not found'}")
+    print(f"Analytics row found: {data.analytics or 'not found'}")
 
     if not data.tables and not data.cards:
         print("No data found. Check files in bot/debug_output to see what the parser loaded.")

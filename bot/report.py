@@ -41,6 +41,7 @@ def build_text_report(data: ParsedReportData) -> str:
         raise RuntimeError("Не нашёл строку последнего дня месяца в таблице.")
 
     row = data.last_day
+    analytics = data.analytics or {}
     day = _get_value(row, ["Дата", "column_1"], "")
     date_str = data.collected_at.strftime("%d.%m.%Y")
     if day.isdigit():
@@ -54,11 +55,11 @@ def build_text_report(data: ParsedReportData) -> str:
     orders = _clean_number(_get_value(row, ["Заказы, шт.", "Заказы"], "0"))
     average_check = _clean_number(_get_value(row, ["Средний чек, руб.", "Средний чек"], "0"))
     average_speed = _get_value(row, ["Скорость кухни", "Средняя скорость", "Среднее время приготовления"], "0")
-    long_orders = _clean_number(_get_value(row, ["Долгих", "Долгие", "Долгих заказов"], "0"))
-    likes = _clean_number(_get_value(row, ["Лайки"], "0"))
-    dislikes = _clean_number(_get_value(row, ["Дизлайки"], "0"))
-    new_guests = _clean_number(_get_value(row, ["Новых гостей", "Новые гости"], "0"))
-    old_guests = _clean_number(_get_value(row, ["Старых гостей", "Старые гости"], "0"))
+    long_orders = _clean_number(_get_value(row, ["Долгие заказы", "Долгих", "Долгие", "Долгих заказов"], "0"))
+    likes = _clean_number(_get_value(analytics, ["Лайки, #", "Лайки"], "0"))
+    dislikes = _clean_number(_get_value(analytics, ["Дизлайки, #", "Дизлайки"], "0"))
+    new_guests = _clean_number(_get_value(row, ["Новых клиентов", "Новых гостей", "Новые гости"], "0"))
+    old_guests = _clean_number(_get_value(row, ["Старых клиентов", "Старых гостей", "Старые гости"], "0"))
 
     return "\n".join(
         [

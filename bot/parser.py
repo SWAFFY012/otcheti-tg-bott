@@ -16,6 +16,7 @@ class ParsedReportData:
     tables: list[dict]
     cards: list[dict[str, str]]
     last_day: dict[str, str] | None = None
+    analytics: dict[str, str] | None = None
 
 
 async def _locator_exists(page: Page, selector: str) -> bool:
@@ -144,6 +145,83 @@ def _find_last_day_row(tables: list[dict]) -> dict[str, str] | None:
     return best_row
 
 
+async def _open_guest_opinion(page: Page, config: SiteConfig) -> None:
+    """Open Analytics -> Guest opinion using text labels visible in OfficeManager."""
+    analytics_url = config.data_selectors.get(
+        "analytics_url",
+        "https://officemanager.dodois.io/OfficeManager/Analytics",
+    )
+    guest_opinion_text = config.data_selectors.get("guest_opinion_text", "Гостевое мнение")
+
+    await page.goto(analytics_url, wait_until="networkidle", timeout=config.timeout_ms)
+
+    guest_opinion = page.get_by_text(guest_opinion_text, exact=True)
+    if await guest_opinion.count() > 0:
+        await guest_opinion.first.click()
+        await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+
+    metrics_tab_text = config.data_selectors.get(
+        "guest_metrics_tab_text",
+        "Дизлайки и операционные метрики",
+    )
+    metrics_tab = page.get_by_text(metrics_tab_text, exact=True)
+    if await metrics_tab.count() > 0:
+        await metrics_tab.first.click()
+        await page.wait_for_load_state("networkidle", timeout=config.timeout_ms)
+
+
+async def _prepare_guest_opinion_table(page: Page, config: SiteConfig) -> None:
+    """Set the analytics filters as closely as possible to the screen flow."""
+    period_text = config.data_selectors.get("analytics_period_text", "Последние сутки")
+    search_text = config.data_selectors.get("analytics_search_text", "химки")
+    section_text = config.data_selectors.get("analytics_scores_section_text", "Оценки за весь период по кофейням")
+
+    period = page.get_by_text(period_text, exact=True)
+    if await period.count() > 0:
+        await period.first.click()
+        await page.keyboard.press("Escape")
+
+    await page.mouse.wheel(0, 5000)
+
+    section = page.get_by_text(section_text, exact=True)
+    if await section.count() > 0:
+        await section.first.scroll_into_view_if_needed()
+
+    search_input = page.locator(
+        f"text={section_text} >> xpath=following::input[1]"
+    )
+    if await search_input.count() == 0:
+        search_input = page.locator("input").last
+
+    if await search_input.count() > 0:
+        await search_input.fill(search_text)
+        await page.wait_for_timeout(1500)
+
+
+def _find_row_by_text(tables: list[dict], needle: str) -> dict[str, str] | None:
+    needle = needle.lower()
+    for table in tables:
+        for row in table.get("rows", []):
+            if needle in " ".join(row.values()).lower():
+                return row
+    return None
+
+
+async def _extract_guest_opinion_metrics(page: Page, config: SiteConfig) -> dict[str, str]:
+    """Extract likes and dislikes from Analytics -> Guest opinion."""
+    try:
+        await _open_guest_opinion(page, config)
+        await _prepare_guest_opinion_table(page, config)
+        tables = await _extract_tables(page, config.data_selectors.get("tables", "table"))
+        row = _find_row_by_text(tables, config.data_selectors.get("analytics_search_text", "химки"))
+        if not row:
+            return {}
+        return row
+    except Exception:
+        await _save_debug_artifacts(page, "guest_opinion")
+        return {}
+
+
 async def _extract_cards(page: Page, selector: str) -> list[dict[str, str]]:
     """Collect visible metric blocks for pages that render data as cards instead of tables."""
     cards = []
@@ -159,14 +237,14 @@ async def _extract_cards(page: Page, selector: str) -> list[dict[str, str]]:
     return cards
 
 
-async def _save_debug_artifacts(page: Page) -> None:
+async def _save_debug_artifacts(page: Page, label: str = "monthly_statistics") -> None:
     debug_dir = Path(__file__).resolve().parent / "debug_output"
     debug_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    await page.screenshot(path=debug_dir / f"monthly_statistics_{timestamp}.png", full_page=True)
+    await page.screenshot(path=debug_dir / f"{label}_{timestamp}.png", full_page=True)
     html = await page.content()
-    (debug_dir / f"monthly_statistics_{timestamp}.html").write_text(html, encoding="utf-8")
+    (debug_dir / f"{label}_{timestamp}.html").write_text(html, encoding="utf-8")
 
 
 async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
@@ -201,6 +279,8 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
             if not tables and not cards:
                 await _save_debug_artifacts(page)
 
+            analytics = await _extract_guest_opinion_metrics(page, config)
+
             await context.storage_state(path=config.storage_state_path)
 
             return ParsedReportData(
@@ -209,6 +289,7 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
                 tables=tables,
                 cards=cards,
                 last_day=last_day,
+                analytics=analytics,
             )
         finally:
             await browser.close()

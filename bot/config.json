@@ -17,6 +17,12 @@
     },
     "data_selectors": {
       "operational_tab_text": "По дням (операционка)",
+      "analytics_url": "https://officemanager.dodois.io/OfficeManager/Analytics",
+      "guest_opinion_text": "Гостевое мнение",
+      "guest_metrics_tab_text": "Дизлайки и операционные метрики",
+      "analytics_period_text": "Последние сутки",
+      "analytics_search_text": "химки",
+      "analytics_scores_section_text": "Оценки за весь период по кофейням",
       "tables": "table",
       "cards": "[data-testid], .card, .tile, .widget"
     }
