@@ -45,6 +45,24 @@ SITE_PASSWORD=office_manager_password
 
 Если сайт поменяет вёрстку, поправьте CSS-селекторы в `bot/config.json`.
 
+### Локальная проверка парсинга OfficeManager
+
+Перед запуском Telegram-бота проверьте, что сайт реально парсится на вашем компьютере:
+
+```powershell
+cd bot
+pip install -r requirements.txt
+python -m playwright install chromium
+python login.py
+python test_parser.py
+```
+
+`login.py` откроет браузер. Войдите в OfficeManager вручную, дождитесь страницы статистики,
+вернитесь в терминал и нажмите Enter. Сессия сохранится в `bot/auth_state.json`.
+
+`test_parser.py` создаст Excel-файл в `bot/reports/`. Если данных не найдено, проверьте
+скриншот и HTML в `bot/debug_output/`.
+
 ## Деплой на Render
 
 Для `/report`-бота нужен Render Background Worker, а не Web Service. В репозитории есть

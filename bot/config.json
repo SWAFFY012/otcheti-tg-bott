@@ -9,6 +9,7 @@
     "password": "",
     "headless": true,
     "timeout_ms": 60000,
+    "storage_state_path": "auth_state.json",
     "login_selectors": {
       "username": "input[type='email'], input[name='email'], input[name='login'], input[type='text']",
       "password": "input[type='password']",

@@ -23,6 +23,7 @@ class SiteConfig:
     password: str
     headless: bool
     timeout_ms: int
+    storage_state_path: Path
     login_selectors: dict[str, str]
     data_selectors: dict[str, str]
 
@@ -78,6 +79,10 @@ def load_config() -> AppConfig:
     if not output_dir.is_absolute():
         output_dir = BASE_DIR / output_dir
 
+    storage_state_path = Path(site.get("storage_state_path", "auth_state.json"))
+    if not storage_state_path.is_absolute():
+        storage_state_path = BASE_DIR / storage_state_path
+
     return AppConfig(
         telegram=TelegramConfig(
             token=token,
@@ -89,6 +94,7 @@ def load_config() -> AppConfig:
             password=password,
             headless=bool(site.get("headless", True)),
             timeout_ms=int(site.get("timeout_ms", 60000)),
+            storage_state_path=storage_state_path,
             login_selectors=site.get("login_selectors", {}),
             data_selectors=site.get("data_selectors", {}),
         ),

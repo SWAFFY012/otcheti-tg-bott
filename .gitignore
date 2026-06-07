@@ -1,5 +1,7 @@
 __pycache__/
 *.pyc
 bot/.env
+bot/auth_state.json
+bot/debug_output/
 bot/reports/*.xlsx
 !bot/reports/.gitkeep

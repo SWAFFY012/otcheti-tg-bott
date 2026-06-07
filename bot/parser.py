@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, async_playwright
 
@@ -102,11 +103,26 @@ async def _extract_cards(page: Page, selector: str) -> list[dict[str, str]]:
     return cards
 
 
+async def _save_debug_artifacts(page: Page) -> None:
+    debug_dir = Path(__file__).resolve().parent / "debug_output"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    await page.screenshot(path=debug_dir / f"monthly_statistics_{timestamp}.png", full_page=True)
+    html = await page.content()
+    (debug_dir / f"monthly_statistics_{timestamp}.html").write_text(html, encoding="utf-8")
+
+
 async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
     """Open OfficeManager, authorize if needed, wait for JavaScript data, and parse visible data."""
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=config.headless)
-        page = await browser.new_page()
+        context_options = {}
+        if config.storage_state_path.exists():
+            context_options["storage_state"] = str(config.storage_state_path)
+
+        context = await browser.new_context(**context_options)
+        page = await context.new_page()
         page.set_default_timeout(config.timeout_ms)
 
         try:
@@ -124,6 +140,9 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
 
             tables = await _extract_tables(page, table_selector)
             cards = await _extract_cards(page, card_selector)
+            if not tables and not cards:
+                await _save_debug_artifacts(page)
+
             return ParsedReportData(
                 source_url=config.url,
                 collected_at=datetime.now(),
