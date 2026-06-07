@@ -45,6 +45,12 @@ SITE_PASSWORD=office_manager_password
 
 Если сайт поменяет вёрстку, поправьте CSS-селекторы в `bot/config.json`.
 
+Для ручного сохранения входа в OfficeManager из корня проекта можно запустить:
+
+```bash
+python login.py
+```
+
 ### Локальная проверка парсинга OfficeManager
 
 Перед запуском Telegram-бота проверьте, что сайт реально парсится на вашем компьютере:
