@@ -7,6 +7,7 @@ from typing import Any
 
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
+ENV_PATH = BASE_DIR / ".env"
 
 
 @dataclass(frozen=True)
@@ -44,8 +45,26 @@ def _read_config() -> dict[str, Any]:
         return json.load(file)
 
 
+def _load_env_file() -> None:
+    """Load simple KEY=VALUE lines from bot/.env without requiring extra packages."""
+    if not ENV_PATH.exists():
+        return
+
+    with ENV_PATH.open("r", encoding="utf-8") as file:
+        for line in file:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
+
+
 def load_config() -> AppConfig:
     """Load config.json and let environment variables override secrets."""
+    _load_env_file()
     raw = _read_config()
     telegram = raw["telegram"]
     site = raw["site"]

@@ -30,20 +30,18 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python -m playwright install chromium
-set BOT_TOKEN=telegram_bot_token
-set SITE_LOGIN=office_manager_login
-set SITE_PASSWORD=office_manager_password
 python main.py
 ```
 
-На Linux-сервере переменные задаются так:
+Перед запуском создайте файл `bot/.env` по примеру `bot/.env.example`:
 
-```bash
-export BOT_TOKEN="telegram_bot_token"
-export SITE_LOGIN="office_manager_login"
-export SITE_PASSWORD="office_manager_password"
-python main.py
+```text
+BOT_TOKEN=telegram_bot_token
+SITE_LOGIN=office_manager_login
+SITE_PASSWORD=office_manager_password
 ```
+
+Этот файл не загружается в GitHub, поэтому токен и пароль останутся на сервере.
 
 Если сайт поменяет вёрстку, поправьте CSS-селекторы в `bot/config.json`.
 
