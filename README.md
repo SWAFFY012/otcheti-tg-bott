@@ -45,6 +45,23 @@ SITE_PASSWORD=office_manager_password
 
 Если сайт поменяет вёрстку, поправьте CSS-селекторы в `bot/config.json`.
 
+## Деплой на Render
+
+Для `/report`-бота нужен Render Background Worker, а не Web Service. В репозитории есть
+`render.yaml` и `Dockerfile`, поэтому Render может собрать проект автоматически.
+
+1. Откройте Render Dashboard.
+2. Выберите `New` -> `Blueprint`.
+3. Выберите репозиторий `SWAFFY012/otcheti-tg-bott`.
+4. Render найдёт `render.yaml` и создаст worker `otcheti-tg-bott`.
+5. В Environment Variables введите:
+   - `BOT_TOKEN` - токен Telegram-бота
+   - `SITE_LOGIN` - логин OfficeManager
+   - `SITE_PASSWORD` - пароль OfficeManager
+6. Запустите Deploy.
+
+Если создаёте вручную через `New` -> `Background Worker`, используйте Docker runtime.
+
 ## Поля отчёта
 
 Бот спрашивает:

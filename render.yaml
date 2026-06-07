@@ -1,0 +1,12 @@
+services:
+  - type: worker
+    name: otcheti-tg-bott
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: SITE_LOGIN
+        sync: false
+      - key: SITE_PASSWORD
+        sync: false
