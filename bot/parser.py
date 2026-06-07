@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError, async_playwright
+from playwright.async_api import BrowserContext, Page, TimeoutError as PlaywrightTimeoutError, async_playwright
 
 from config import SiteConfig
 
@@ -254,6 +254,169 @@ def _find_last_day_row(tables: list[dict]) -> dict[str, str] | None:
                 best_row.update(_merge_related_rows(tables, row))
 
     return best_row
+
+
+def _first_number(text: str) -> str:
+    match = re.search(r"-?\d+(?:[\s\xa0]\d{3})*(?:[,.]\d+)?", text)
+    return match.group(0).replace("\xa0", " ").strip() if match else ""
+
+
+def _first_time(text: str) -> str:
+    match = re.search(r"\b\d{1,2}:\d{2}\b", text)
+    return match.group(0) if match else ""
+
+
+def _find_metric_near_keywords(lines: list[str], keywords: list[str], *, time_value: bool = False) -> str:
+    """Find a number/time on the same line or the next few lines after a metric label."""
+    extractor = _first_time if time_value else _first_number
+
+    for index, line in enumerate(lines):
+        lowered = line.lower()
+        if not any(keyword in lowered for keyword in keywords):
+            continue
+
+        for candidate in [line, *lines[index + 1 : index + 4]]:
+            value = extractor(candidate)
+            if value:
+                return value
+
+    return ""
+
+
+def _find_time_before_label(lines: list[str], label: str) -> str:
+    """Find a time value immediately before a label such as 'среднее за день'."""
+    label = label.lower()
+    for index, line in enumerate(lines):
+        if label not in line.lower():
+            continue
+
+        for candidate in reversed(lines[max(0, index - 3) : index + 1]):
+            value = _first_time(candidate)
+            if value:
+                return value
+
+    return ""
+
+
+def _is_green_rgb(value: str) -> bool:
+    numbers = [int(number) for number in re.findall(r"\d+", value)[:3]]
+    return len(numbers) == 3 and numbers[1] > numbers[0] + 25 and numbers[1] > numbers[2] + 10
+
+
+def _is_red_rgb(value: str) -> bool:
+    numbers = [int(number) for number in re.findall(r"\d+", value)[:3]]
+    return len(numbers) == 3 and numbers[0] > numbers[1] + 25 and numbers[0] > numbers[2] + 10
+
+
+async def _extract_colored_motivation_numbers(page: Page) -> dict[str, str]:
+    """Fallback for motivation board cards where likes/dislikes are shown only by color."""
+    elements = await page.evaluate(
+        """() => [...document.querySelectorAll('body *')].map((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            const text = (element.innerText || '').trim();
+            return {
+                text,
+                color: style.color,
+                background: style.backgroundColor,
+                visible: rect.width > 0 && rect.height > 0,
+            };
+        }).filter((item) => item.visible && item.text && item.text.length <= 40)"""
+    )
+
+    result: dict[str, str] = {}
+    for item in elements:
+        value = _first_number(str(item.get("text", "")))
+        if not value:
+            continue
+
+        color = f"{item.get('color', '')} {item.get('background', '')}"
+        if "Лайки, #" not in result and _is_green_rgb(color):
+            result["Лайки, #"] = value
+        if "Дизлайки, #" not in result and _is_red_rgb(color):
+            result["Дизлайки, #"] = value
+        if "Лайки, #" in result and "Дизлайки, #" in result:
+            break
+
+    return result
+
+
+async def _extract_motivationboard_exact_values(page: Page) -> dict[str, str]:
+    """Read known motivation board widgets by their rendered attributes and labels."""
+    return await page.evaluate(
+        """() => {
+            const result = {};
+            const readThumb = (color) => {
+                const cards = [...document.querySelectorAll(`div[backgroundcolor="#ffffff"][color="${color}"]`)];
+                for (const card of cards) {
+                    const text = (card.innerText || '').trim();
+                    const match = text.match(/\\d+/);
+                    if (match) return match[0];
+                }
+                return '';
+            };
+
+            const red = readThumb('#FF5050');
+            const green = readThumb('#2FCF07');
+            if (red) result['Дизлайки, #'] = red;
+            if (green) result['Лайки, #'] = green;
+
+            const labels = [...document.querySelectorAll('span')];
+            const dayLabel = labels.find((span) => (span.innerText || '').trim().toLowerCase() === 'среднее за день');
+            if (dayLabel && dayLabel.parentElement) {
+                const time = [...dayLabel.parentElement.querySelectorAll('span')]
+                    .map((span) => (span.innerText || '').trim())
+                    .find((text) => /^\\d{1,2}:\\d{2}$/.test(text));
+                if (time) result['Среднее время приготовления за день'] = time;
+            }
+
+            return result;
+        }"""
+    )
+
+
+async def _extract_motivationboard_metrics(context: BrowserContext, config: SiteConfig) -> dict[str, str]:
+    """Open the motivation board and parse likes, dislikes, and daily average cooking time."""
+    url = config.data_selectors.get("motivationboard_url", "")
+    if not url:
+        return {}
+
+    page = await context.new_page()
+    page.set_default_timeout(config.timeout_ms)
+
+    try:
+        print("Motivationboard: opening board...")
+        await _goto(page, url, config)
+        await _try_login(page, config)
+        await page.wait_for_timeout(10000)
+        await _save_debug_artifacts(page, "motivationboard")
+
+        result = await _extract_motivationboard_exact_values(page)
+        text = await page.locator("body").inner_text()
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        fallback = {
+            "Лайки, #": _find_metric_near_keywords(lines, ["лайк", "позитив"]),
+            "Дизлайки, #": _find_metric_near_keywords(lines, ["дизлайк", "негатив"]),
+            "Среднее время приготовления за день": _find_time_before_label(lines, "среднее за день")
+            or _find_metric_near_keywords(
+                lines,
+                ["среднее время приготовления", "время приготовления", "среднее время", "готов"],
+                time_value=True,
+            ),
+        }
+
+        colored = await _extract_colored_motivation_numbers(page)
+        for source in (fallback, colored):
+            for key, value in source.items():
+                if value and not result.get(key):
+                    result[key] = value
+
+        return {key: value for key, value in result.items() if value}
+    except Exception:
+        await _save_debug_artifacts(page, "motivationboard_error")
+        return {}
+    finally:
+        await page.close()
 
 
 async def _open_guest_opinion(page: Page, config: SiteConfig) -> None:
@@ -623,7 +786,7 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
             if not tables and not cards:
                 await _save_debug_artifacts(page)
 
-            analytics = await _extract_guest_opinion_metrics(page, config)
+            analytics = await _extract_motivationboard_metrics(context, config)
 
             await context.storage_state(path=config.storage_state_path)
 
