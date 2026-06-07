@@ -30,6 +30,11 @@ def _clean_number(value: str) -> str:
     return cleaned.replace(" ", "")
 
 
+def _clean_percent(value: str) -> str:
+    cleaned = value.replace("\xa0", " ").replace(" ", "").strip()
+    return cleaned or "0%"
+
+
 def build_text_report(data: ParsedReportData) -> str:
     """Build the short Telegram report from the last operational day row."""
     if not data.last_day:
@@ -45,6 +50,7 @@ def build_text_report(data: ParsedReportData) -> str:
             date_str = f"{int(day):02d}.{data.collected_at.strftime('%m.%Y')}"
 
     revenue = _clean_number(_get_value(row, ["Выручка, руб.", "Выручка"], "0"))
+    revenue_growth = _clean_percent(_get_value(row, ["Прирост выручки, %", "Прирост выручки"], "0%"))
     orders = _clean_number(_get_value(row, ["Заказы, шт.", "Заказы"], "0"))
     average_check = _clean_number(_get_value(row, ["Средний чек, руб.", "Средний чек"], "0"))
     average_speed = _get_value(row, ["Скорость кухни", "Средняя скорость", "Среднее время приготовления"], "0")
@@ -57,7 +63,7 @@ def build_text_report(data: ParsedReportData) -> str:
     return "\n".join(
         [
             f"Отчёт Мега Химки {date_str}:",
-            f"Выручка - {revenue}",
+            f"Выручка - {revenue} ({revenue_growth})",
             f"Заказы - {orders}",
             f"Средний чек - {average_check}",
             f"Средняя скорость - {average_speed}",
