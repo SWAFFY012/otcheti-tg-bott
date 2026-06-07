@@ -97,6 +97,33 @@ async def _extract_tables(page: Page, selector: str) -> list[dict]:
     return tables
 
 
+async def _scroll_horizontal_areas(page: Page, ratio: float) -> None:
+    """Scroll all horizontally scrollable containers to expose virtualized table columns."""
+    await page.evaluate(
+        """ratio => {
+            for (const element of document.querySelectorAll('*')) {
+                if (element.scrollWidth > element.clientWidth + 20) {
+                    element.scrollLeft = (element.scrollWidth - element.clientWidth) * ratio;
+                }
+            }
+        }""",
+        ratio,
+    )
+    await page.wait_for_timeout(800)
+
+
+async def _extract_tables_all_columns(page: Page, selector: str) -> list[dict]:
+    """Extract table snapshots from left, middle, and right horizontal scroll positions."""
+    tables = []
+
+    for ratio in (0, 0.5, 1):
+        await _scroll_horizontal_areas(page, ratio)
+        tables.extend(await _extract_tables(page, selector))
+
+    await _scroll_horizontal_areas(page, 0)
+    return tables
+
+
 def _normalize_headers(headers: list[str]) -> list[str]:
     normalized = []
     seen = {}
@@ -140,7 +167,9 @@ def _find_last_day_row(tables: list[dict]) -> dict[str, str] | None:
             day = int(day_text)
             if day > best_day:
                 best_day = day
-                best_row = row
+                best_row = dict(row)
+            elif day == best_day and best_row is not None:
+                best_row.update({key: value for key, value in row.items() if value not in ("", None)})
 
     return best_row
 
@@ -187,9 +216,9 @@ async def _prepare_guest_opinion_table(page: Page, config: SiteConfig) -> None:
     if await section.count() > 0:
         await section.first.scroll_into_view_if_needed()
 
-    search_input = page.locator(
-        f"text={section_text} >> xpath=following::input[1]"
-    )
+    search_input = page.get_by_placeholder("Поиск").last
+    if await search_input.count() == 0:
+        search_input = page.locator(f"text={section_text} >> xpath=following::input[1]")
     if await search_input.count() == 0:
         search_input = page.locator("input").last
 
@@ -212,7 +241,7 @@ async def _extract_guest_opinion_metrics(page: Page, config: SiteConfig) -> dict
     try:
         await _open_guest_opinion(page, config)
         await _prepare_guest_opinion_table(page, config)
-        tables = await _extract_tables(page, config.data_selectors.get("tables", "table"))
+        tables = await _extract_tables_all_columns(page, config.data_selectors.get("tables", "table"))
         row = _find_row_by_text(tables, config.data_selectors.get("analytics_search_text", "химки"))
         if not row:
             return {}
@@ -273,7 +302,7 @@ async def get_monthly_statistics(config: SiteConfig) -> ParsedReportData:
                 # The report will still include a diagnostic sheet instead of failing silently.
                 pass
 
-            tables = await _extract_tables(page, table_selector)
+            tables = await _extract_tables_all_columns(page, table_selector)
             cards = await _extract_cards(page, card_selector)
             last_day = _find_last_day_row(tables)
             if not tables and not cards:
