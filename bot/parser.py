@@ -113,7 +113,10 @@ async def _extract_tables(page: Page, selector: str) -> list[dict]:
                 continue
             if headers and cells == headers:
                 continue
-            rows.append(_cells_to_row(headers, cells))
+            row = _cells_to_row(headers, cells)
+            row["__row_index"] = str(row_index)
+            row["__table_index"] = str(table_index)
+            rows.append(row)
 
         if rows:
             tables.append({"name": f"table_{table_index + 1}", "rows": rows})
@@ -177,6 +180,27 @@ def _cells_to_row(headers: list[str], cells: list[str]) -> dict[str, str]:
     return row
 
 
+def _merge_related_rows(tables: list[dict], base_row: dict[str, str]) -> dict[str, str]:
+    """Merge horizontally-scrolled snapshots that belong to the same visual row."""
+    row_index = base_row.get("__row_index")
+    merged = dict(base_row)
+
+    if row_index is None:
+        return merged
+
+    for table in tables:
+        for row in table.get("rows", []):
+            if row.get("__row_index") != row_index:
+                continue
+            for key, value in row.items():
+                if key.startswith("__") or value in ("", None):
+                    continue
+                if key not in merged or not merged[key]:
+                    merged[key] = value
+
+    return merged
+
+
 def _find_last_day_row(tables: list[dict]) -> dict[str, str] | None:
     """Find the last monthly row by the numeric day in the left table column."""
     best_day = -1
@@ -191,9 +215,9 @@ def _find_last_day_row(tables: list[dict]) -> dict[str, str] | None:
             day = int(day_text)
             if day > best_day:
                 best_day = day
-                best_row = dict(row)
+                best_row = _merge_related_rows(tables, row)
             elif day == best_day and best_row is not None:
-                best_row.update({key: value for key, value in row.items() if value not in ("", None)})
+                best_row.update(_merge_related_rows(tables, row))
 
     return best_row
 
@@ -256,7 +280,7 @@ def _find_row_by_text(tables: list[dict], needle: str) -> dict[str, str] | None:
     for table in tables:
         for row in table.get("rows", []):
             if needle in " ".join(row.values()).lower():
-                return row
+                return _merge_related_rows(tables, row)
     return None
 
 
