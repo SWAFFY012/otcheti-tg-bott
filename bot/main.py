@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, F
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -16,7 +17,6 @@ config = load_config()
 if not config.telegram.token:
     raise SystemExit("Set BOT_TOKEN or TOKEN before starting the bot.")
 
-bot = Bot(token=config.telegram.token)
 dp = Dispatcher()
 
 
@@ -53,12 +53,45 @@ async def unknown_text(message: Message) -> None:
     await message.answer("Я понимаю команду /report.")
 
 
+async def _run_with_retries(action, description: str, attempts: int = 5):
+    """Retry Telegram startup calls because local network timeouts are common on Windows."""
+    last_error = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return await action()
+        except TelegramNetworkError as exc:
+            last_error = exc
+            wait_seconds = min(attempt * 5, 20)
+            logging.warning(
+                "%s failed (%s/%s): %s. Retrying in %s seconds...",
+                description,
+                attempt,
+                attempts,
+                exc,
+                wait_seconds,
+            )
+            await asyncio.sleep(wait_seconds)
+
+    raise RuntimeError(
+        "Не могу подключиться к Telegram api.telegram.org:443. "
+        "Проверьте интернет, VPN/прокси, антивирус/фаервол и попробуйте снова."
+    ) from last_error
+
+
 async def main() -> None:
-    # Polling cannot work while Telegram sends updates to an old webhook URL.
-    await bot.delete_webhook(drop_pending_updates=True)
-    me = await bot.get_me()
-    print(f"Бот запущен: @{me.username}. Оставьте это окно открытым.")
-    await dp.start_polling(bot)
+    bot = Bot(token=config.telegram.token)
+
+    try:
+        # Polling cannot work while Telegram sends updates to an old webhook URL.
+        await _run_with_retries(lambda: bot.delete_webhook(drop_pending_updates=True), "delete_webhook")
+        me = await _run_with_retries(bot.get_me, "get_me")
+        print(f"Бот запущен: @{me.username}. Оставьте это окно открытым.")
+        await dp.start_polling(bot)
+    except RuntimeError as exc:
+        print(exc)
+    finally:
+        await bot.session.close()
 
 
 if __name__ == "__main__":
